@@ -29,16 +29,44 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-class PrefixAdvertisement {
+class PrefixAdvertisement implements JsonSerializable {
     public string $prefix;
     public int $added_on;
     public int $adv_valid_lifetime;
-    public int $ra_max_interval;
     public bool $adv_on_link;
     public bool $adv_autonomous;
 
-    function get_expires_on() {
-        return $this->added_on + $adv_valid_lifetime + $ra_max_interval + 5;
+    public function __construct(
+        string $prefix = "2001:db8::/64",
+        int $added_on = 0,
+        int $adv_valid_lifetime = 0,
+        bool $adv_on_link = true,
+        bool $adv_autonomous = true,
+    ) {
+        $this->prefix = $prefix;
+        $this->added_on = $added_on;
+        $this->adv_valid_lifetime = $adv_valid_lifetime;
+        $this->adv_on_link = $adv_on_link;
+        $this->adv_autonomous = $adv_autonomous;
+    }
+
+    public function get_expires_on(): int {
+        // plus 25s accounts for time it takes to finish running this, radvd, etc.
+        return $this->added_on + $this->adv_valid_lifetime + 25;
+    }
+
+    public function jsonSerialize(): array {
+        $vars = get_object_vars($this);
+        $vars["expires_on"] = $this->get_expires_on();
+        return $vars;
+    }
+
+    public function fromJson(string $json) {
+        $data = json_decode($json, false);
+
+        foreach (get_object_vars($data) as $k => $v) {
+            $this->$k = $v;
+        }
     }
 }
 
@@ -117,7 +145,6 @@ function radvd_configure_do($verbose = false, $blacklist = [])
     /* Process all links which need the router advertise daemon */
     $radvdifs = array();
 
-    $if_ra_max_interval = array();
 
     $new_prefix_advertisements = array();
 
@@ -173,14 +200,13 @@ function radvd_configure_do($verbose = false, $blacklist = [])
             }
         }
 
-        $ra_max_interval = !empty($dhcpv6ifconf['ramaxinterval']) ? $dhcpv6ifconf['ramaxinterval'] : '600');
-        $if_ra_max_interval[$dhcpv6if] = $ra_max_interval;
+        $ra_max_interval = !empty($dhcpv6ifconf['ramaxinterval']) ? $dhcpv6ifconf['ramaxinterval'] : '600';
 
         $radvdconf .= "# Generated RADVD config for manual assignment on {$dhcpv6if}\n";
         $radvdconf .= "interface {$realif} {\n";
         $radvdconf .= "\tAdvSendAdvert on;\n";
         $radvdconf .= sprintf("\tMinRtrAdvInterval %s;\n", !empty($dhcpv6ifconf['ramininterval']) ? $dhcpv6ifconf['ramininterval'] : '200');
-        $radvdconf .= sprintf("\tMaxRtrAdvInterval %s;\n", $ra_max_interval;
+        $radvdconf .= sprintf("\tMaxRtrAdvInterval %s;\n", $ra_max_interval);
         if (!empty($dhcpv6ifconf['AdvDefaultLifetime'])) {
             $radvdconf .= sprintf("\tAdvDefaultLifetime %s;\n", $dhcpv6ifconf['AdvDefaultLifetime']);
         }
@@ -274,6 +300,7 @@ function radvd_configure_do($verbose = false, $blacklist = [])
                 case 'unmanaged':
                     $radvdconf .= "\t\tAdvOnLink on;\n";
                     $radvdconf .= "\t\tAdvAutonomous on;\n";
+
                     $prefix_advert->adv_on_link = true;
                     $prefix_advert->adv_autonomous = true;
                     break;
@@ -287,15 +314,18 @@ function radvd_configure_do($verbose = false, $blacklist = [])
                 case 'router':
                     $radvdconf .= "\t\tAdvOnLink off;\n";
                     $radvdconf .= "\t\tAdvAutonomous off;\n";
+
                     $prefix_advert->adv_on_link = false;
                     $prefix_advert->adv_autonomous = false;
                     break;
                 default:
                     break;
             }
-            if (!empty($dhcpv6ifconf['AdvValidLifetime'])) {
-                $radvdconf .= sprintf("\t\tAdvValidLifetime %s;\n", $dhcpv6ifconf['AdvValidLifetime']);
-            }
+
+            // 86400 seems to be the default in radvd
+            $adv_valid_lifetime = !empty($dhcpv6ifconf['AdvValidLifetime']) ? $dhcpv6ifconf['AdvValidLifetime'] : '86400';
+            $radvdconf .= sprintf("\t\tAdvValidLifetime %s;\n", $adv_valid_lifetime);
+
             if (!empty($dhcpv6ifconf['AdvPreferredLifetime'])) {
                 $radvdconf .= sprintf("\t\tAdvPreferredLifetime %s;\n", $dhcpv6ifconf['AdvPreferredLifetime']);
             }
@@ -303,11 +333,12 @@ function radvd_configure_do($verbose = false, $blacklist = [])
 
 
 
-            $ra_max_interval = !empty($dhcpv6ifconf['ramaxinterval']) ? $dhcpv6ifconf['ramaxinterval'] : '600');
 
             $prefix_advert->added_on = time();
-            $prefix_advert->adv_valid_lifetime = $ra_max_interval;
-            $prefix_advert->ra_max_interval = $ra_max_interval;
+            $prefix_advert->adv_valid_lifetime = (int)$adv_valid_lifetime;
+
+            $if_prefix_advertisements[] = $prefix_advert;
+
         }
 
         if (!empty($dhcpv6ifconf['raroutes'])) {
