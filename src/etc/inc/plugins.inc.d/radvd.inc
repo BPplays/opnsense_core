@@ -29,21 +29,26 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+
 class PrefixAdvertisement implements JsonSerializable {
     public string $prefix;
-    public int $added_on;
+    public bool $deprecated;
+    public ?int $added_on;
     public int $adv_valid_lifetime;
     public bool $adv_on_link;
     public bool $adv_autonomous;
 
     public function __construct(
         string $prefix = "2001:db8::/64",
-        int $added_on = 0,
+        bool $deprecated = false,
+        ?int $added_on = null,
         int $adv_valid_lifetime = 0,
         bool $adv_on_link = true,
         bool $adv_autonomous = true,
     ) {
         $this->prefix = $prefix;
+        $this->deprecated = $deprecated;
         $this->added_on = $added_on;
         $this->adv_valid_lifetime = $adv_valid_lifetime;
         $this->adv_on_link = $adv_on_link;
@@ -52,13 +57,11 @@ class PrefixAdvertisement implements JsonSerializable {
 
     public function get_expires_on(): int {
         // plus 25s accounts for time it takes to finish running this, radvd, etc.
-        return $this->added_on + $this->adv_valid_lifetime + 25;
+        return $this->added_on + $this->adv_valid_lifetime + time() + 25;
     }
 
     public function jsonSerialize(): array {
-        $vars = get_object_vars($this);
-        $vars["expires_on"] = $this->get_expires_on();
-        return $vars;
+        return get_object_vars($this);
     }
 
     public function fromJson(string $json) {
@@ -146,6 +149,8 @@ function radvd_configure_do($verbose = false, $blacklist = [])
     $radvdifs = array();
 
 
+
+    /** @var array<string, list<PrefixAdvertisement>> $new_prefix_advertisements */
     $new_prefix_advertisements = array();
 
     /* handle manually configured DHCP6 server settings first */
@@ -167,6 +172,7 @@ function radvd_configure_do($verbose = false, $blacklist = [])
         $carp_mode = false;
         $src_addr = false;
 
+        /** @var list<PrefixAdvertisement> $if_prefix_advertisements */
         $if_prefix_advertisements = array();
 
 
@@ -410,6 +416,8 @@ function radvd_configure_do($verbose = false, $blacklist = [])
         }
 
         $radvdconf .= "};\n";
+
+        $new_prefix_advertisements[$dhcpv6if] = $if_prefix_advertisements;
     }
 
 
@@ -531,6 +539,13 @@ function radvd_configure_do($verbose = false, $blacklist = [])
             $radvdconf .= "\tDNSSL {$config['system']['domain']} { };\n";
         }
         $radvdconf .= "};\n";
+    }
+
+    $prefix_map = [];
+    foreach ($new_prefix_advertisements as $if_prefix_advertisements) {
+        foreach ($if_prefix_advertisements as $prefix) {
+            $prefix_map[$prefix] = true;
+        }
     }
 
     $radvd_conf_file = '/var/etc/radvd.conf';
