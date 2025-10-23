@@ -33,23 +33,23 @@
 
 class PrefixAdvertisement implements JsonSerializable {
     public string $prefix;
-    public bool $deprecated;
-    public ?int $added_on;
+    public int $added_on;
+    public ?int $deprecated_on;
     public int $adv_valid_lifetime;
     public bool $adv_on_link;
     public bool $adv_autonomous;
 
     public function __construct(
         string $prefix = "2001:db8::/64",
-        bool $deprecated = false,
-        ?int $added_on = null,
+        int $added_on = time(),
+        ?int $deprecated_on = null,
         int $adv_valid_lifetime = 0,
         bool $adv_on_link = true,
         bool $adv_autonomous = true,
     ) {
         $this->prefix = $prefix;
-        $this->deprecated = $deprecated;
         $this->added_on = $added_on;
+        $this->deprecated_on = $deprecated_on;
         $this->adv_valid_lifetime = $adv_valid_lifetime;
         $this->adv_on_link = $adv_on_link;
         $this->adv_autonomous = $adv_autonomous;
@@ -57,20 +57,89 @@ class PrefixAdvertisement implements JsonSerializable {
 
     public function get_expires_on(): int {
         // plus 25s accounts for time it takes to finish running this, radvd, etc.
-        return $this->added_on + $this->adv_valid_lifetime + time() + 25;
+        return $this->deprecated_on + $this->adv_valid_lifetime + time() + 25;
+    }
+
+    public function is_deprecated(): bool {
+        return ($this->deprecated_on !== null);
     }
 
     public function jsonSerialize(): array {
         return get_object_vars($this);
     }
 
-    public function fromJson(string $json) {
-        $data = json_decode($json, false);
+}
 
-        foreach (get_object_vars($data) as $k => $v) {
-            $this->$k = $v;
+
+/**
+ * @param PrefixAdvertisement[] $existing_prefixes
+ * @param PrefixAdvertisement[] $current_prefixes
+ * @return PrefixAdvertisement[]
+ */
+function set_new_prefix_advertisements(
+    array $existing_prefixes,
+    array $current_prefixes,
+): array {
+
+    $existingMap = [];
+    foreach ($existing_prefixes as $i => $prefix) {
+        $addr = $prefix->prefix;
+        if (!isset($existingMap[$addr])) {
+            $existingMap[$addr] = $i;
+        } else {
+            unset($existing_prefixes[$i]);
         }
     }
+
+    $currentMap = [];
+    foreach ($current_prefixes as $i => $prefix) {
+        $addr = $prefix->prefix;
+        if (!isset($currentMap[$addr])) {
+            $currentMap[$addr] = $i;
+        } else {
+            unset($current_prefixes[$i]);
+        }
+    }
+
+    foreach ($current_prefixes as $prefix) {
+        $addr = $prefix->prefix;
+        if (isset($existingMap[$addr])) {
+            $existing_prefixes[$existingMap[$addr]] = $prefix;
+        } else {
+            $existing_prefixes[] = $prefix;
+        }
+    }
+
+    foreach ($existing_prefixes as $i => $prefix) {
+        $addr = $prefix->prefix;
+        if ($prefix->is_deprecated()) {
+            continue;
+        }
+
+        if (!isset($currentMap[$addr])) {
+            $existing_prefixes[$i]->deprecated_on = time();
+        }
+    }
+
+    return array_values($existing_prefixes);
+}
+
+/**
+ * @param PrefixAdvertisement[] $existing_prefixes
+ * @return PrefixAdvertisement[]
+ */
+function filter_expired(array $existing_prefixes): array {
+    foreach ($existing_prefixes as $i => $prefix) {
+        if (!$prefix->is_deprecated()) {
+            continue;
+        }
+
+        // > insead of => is epsilon here
+        if (time() > $prefix->get_expires_on()) {
+            unset($existing_prefixes[$i]);
+        }
+    }
+    return array_values($existing_prefixes);
 }
 
 function radvd_configure()
