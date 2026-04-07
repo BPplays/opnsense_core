@@ -128,9 +128,11 @@
                 <AddressFamily>ipv6</AddressFamily>
             </nat64prefix>
             <AdvCurHopLimit type="IntegerField">
+                <Default>64</Default>
+                <Required>Y</Required>
                 <MinimumValue>0</MinimumValue>
                 <MaximumValue>255</MaximumValue>
-                <ValidationMessage>Hop limit must be between 0 and 255.</ValidationMessage>
+                <ValidationMessage>Hop limit must be between 0 and 255 (inclusive).</ValidationMessage>
             </AdvCurHopLimit>
         </entries>
     </items>
