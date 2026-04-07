@@ -142,7 +142,7 @@
         <id>entries.AdvCurHopLimit</id>
         <label>Hop limit</label>
         <type>text</type>
-        <help>Controls the maximum number of hops a packet can traverse before being discarded. A value zero means unspecified (by this router)</help>
+        <help>Controls the maximum number of hops a packet can traverse before being discarded. A value of zero means unspecified (by this router)</help>
         <advanced>true</advanced>
         <grid_view>
             <visible>false</visible>
