@@ -187,9 +187,8 @@ function radvd_configure_do($verbose = false, $ignorelist = [])
         if ($entry->AdvDefaultLifetime->isSet()) {
             $radvdconf .= "    AdvDefaultLifetime {$entry->AdvDefaultLifetime->getValue()};\n";
         }
-        $radvdconf .= "    AdvCurHopLimit {$entry->AdvCurHopLimit->getValue()};\n";
-
         $radvdconf .= sprintf("    AdvLinkMTU %s;\n", !empty($mtu) ? $mtu : 0);
+        $radvdconf .= "    AdvCurHopLimit {$entry->AdvCurHopLimit->getValue()};\n";
         $radvdconf .= "    AdvDefaultPreference {$entry->AdvDefaultPreference->getValue()};\n";
 
         switch ($entry->mode->getValue()) {
