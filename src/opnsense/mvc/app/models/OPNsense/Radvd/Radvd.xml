@@ -1,6 +1,6 @@
 <model>
     <mount>//OPNsense/radvd</mount>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <description>Radvd configuration</description>
     <items>
         <entries type="ArrayField">
