@@ -132,7 +132,7 @@
         <id>entries.nat64prefixLifetime</id>
         <label>NAT64 prefix Lifetime</label>
         <type>text</type>
-        <help>The NAT64 prefix included in the router advertisements. The "well-known prefix" reserved for this service is 64:ff9b::/96.</help>
+        <help>Lifetime in seconds the NAT64 prefix will remain valid before becoming unusable.</help>
         <advanced>true</advanced>
         <grid_view>
             <visible>false</visible>
